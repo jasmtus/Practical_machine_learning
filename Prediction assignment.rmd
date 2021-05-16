@@ -1,0 +1,103 @@
+---
+title: "Prediction assignment"
+author: "Jasmina"
+date: "10 maj 2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+#Overview
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively.In this project we will use the data from accelerometers on the belt, forarm, arm and dumbell of 6 parcipants. The goal is to predict the manner in which the participants did the exercisse ("classe" variable). We can use any other variable to predict it with. 
+
+
+#Data loading and processing
+
+Installing all the needed librarys
+```{r, echo=TRUE}
+library(caret)
+library(dplyr)
+library(corrplot)
+library(RColorBrewer)
+library(rattle)
+```
+Loading the test and training dataset and looking at the variables, especially the classe variable
+```{r, echo=TRUE}
+training <- read.csv("pml-training.csv")
+testing <- read.csv("pml-testing.csv")
+str(training)
+str(training$classe)
+```
+The classe variable is a 5 factor varible with levels A, B, C, D, E - which represent different activities. 
+
+##Cleaning the datasets
+
+There are a lot of columns, with mostly NA values, we will not use them for our prediction. We will aslo not use the first 7 columns, because they more descriptive nature. Additionally there are many columns, which contain only a few values. We will remove them by using nearZeroVar (f.e: kurtosis_roll_belt)
+```{r, echo=TRUE}
+training <- training[, which(colMeans(!is.na(training))>0.9)]
+training <- training[,-c(1:7)]
+nzv <- nearZeroVar(training)
+training <- training[,-nzv]
+dim(training)
+```
+After the cleaning we are left with 53 variables
+
+##Creating a validation dataset
+
+```{r, echo=TRUE}
+inTrain <- createDataPartition(training$classe, p=3/4, list=FALSE)
+train <- training[inTrain,]
+validate <- training[-inTrain,]
+```
+
+
+We also look at a correlation plot
+```{r, echo=TRUE}
+corelation <- cor(train[,-53])
+corrplot(corelation, method="circle", type = "upper", tl.cex=0.5, tl.col="black")
+```
+
+There are some variables that are highly correlated
+
+#Model building
+
+For this project we will try two different models
+    - decision trees
+    - random forests
+
+
+##Decision trees
+###Model
+```{r, echo=TRUE}
+dec_tree <- train(classe~., data=train, method="rpart")
+fancyRpartPlot(dec_tree$finalModel)
+```
+
+###Prediction
+```{r, echo=TRUE}
+pred_dec <- predict(dec_tree, validate)
+cmtree <- confusionMatrix(pred_dec, validate$classe)
+cmtree
+```
+We see that the accuracy rate of the model is low: `r cmtree$overall["Accuracy"]` , and therefore out-of the sample error is about `r 1-cmtree$overall["Accuracy"]`.
+
+##Random forest
+###Model
+```{r, echo=TRUE}
+control <- trainControl(method="cv", number=3, verboseIter = F)
+ran_for <- train(classe~., data=train, method="rf", trControl=control, tuneLength = 5)
+```
+###Prediciton
+```{r, echo=TRUE}
+pred_rf <- predict(ran_for, validate)
+cm_rf <- confusionMatrix(pred_rf, validate$classe)
+cm_rf
+```
+We see that the accuracy rate of the model is high `r cm_rf$overall["Accuracy"]` , and therefore out-of the sample error is about `r 1-cm_rf$overall["Accuracy"]`.
+
+#Applying the best model to the testing data.
+```{r, echo=TRUE}
+pred_test <- predict(ran_for, testing)
+pred_test
+```
